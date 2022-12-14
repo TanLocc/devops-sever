@@ -29,7 +29,6 @@ jobs:
       - run:
           name: Make install
           command: |
-            cd nginxApp
             make install
       - run:
           name: Make lint
