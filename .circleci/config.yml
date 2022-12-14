@@ -6,7 +6,7 @@ orbs:
 
 commands:
   cluster-destroy:
-    description: Destroy cloudformation stacks
+    description: Destroy EKS by cloudformation
     parameters:
       cluster-name:
         description: Name of the EKS cluster
@@ -29,6 +29,7 @@ jobs:
       - run:
           name: Make install
           command: |
+            cd nginxApp
             make install
       - run:
           name: Make lint
