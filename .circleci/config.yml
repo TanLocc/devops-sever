@@ -82,7 +82,7 @@ jobs:
           name: Test cluster
       - cluster-destroy
 
-  nginxApp-deployment:
+  app-deployment:
     docker:
       - image: "cimg/python:3.10"
     parameters:
@@ -104,17 +104,14 @@ jobs:
           command: |
             export dockerid=$(($CIRCLE_BUILD_NUM - 2))
             TAG=0.1.$dockerid
-            cat .circleci/files/deployment.yaml | sed "s/{{TAG_ID}}/$TAG/g" > .circleci/files/deployment_tmp.yaml
-            mv .circleci/files/deployment_tmp.yaml .circleci/files/deployment.yaml
+            cat app.yaml | sed "s/{{TAG_ID}}/$TAG/g" > app_tmp.yaml
+            mv app_tmp.yaml app.yaml
       - aws-eks/update-kubeconfig-with-authenticator:
           cluster-name: << parameters.cluster-name >>
           install-kubectl: true
       - kubernetes/create-or-update-resource:
-          resource-file-path: .circleci/files/deployment.yaml
-          resource-name: deployment/nginxapp
-      - kubernetes/create-or-update-resource:
-          resource-file-path: .circleci/files/loadbalancer.yaml
-          resource-name: deployment/nginxapp
+          resource-file-path: app.yaml
+          resource-name: deployment/app
       - run:
           name: Test cluster/deployment
           command: |
@@ -126,12 +123,12 @@ jobs:
       - cluster-destroy
 
 workflows:
-  nginxAppDeployment:
+  AppDeployment:
     jobs:
       - nginxApp-lint
       - docker-build:
           requires: [nginxApp-lint]
-    #   - cluster-build:
-    #       requires: [docker-build]
-    #   - nginxApp-deployment:
-    #       requires: [cluster-build]
+      - cluster-build:
+          requires: [docker-build]
+      - app-deployment:
+          requires: [cluster-build]
