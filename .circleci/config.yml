@@ -1,0 +1,140 @@
+version: 2.1
+
+orbs:
+  aws-eks: circleci/aws-eks@2.2.0
+  kubernetes: circleci/kubernetes@1.3.1
+
+commands:
+  cluster-destroy:
+    description: Destroy cloudformation stacks
+    parameters:
+      cluster-name:
+        description: Name of the EKS cluster
+        type: string
+        default: app-cluster
+    steps:
+      - run:
+          name: Destroy eks stacks
+          when: on_fail
+          command: |
+            aws cloudformation delete-stack \
+            --stack-name eksctl-<<parameters.cluster-name>>-cluster
+
+jobs:
+  nginxApp-lint:
+    docker:
+      - image: python:3.7.3-stretch
+    steps:
+      - checkout
+      - run:
+          name: Make install
+          command: |
+            cd nginxApp
+            make install
+      - run:
+          name: Make lint
+          command: |
+            cd nginxApp
+            make lint
+
+  docker-build:
+    docker:
+      - image: cimg/go:1.17
+        auth:
+          username: lehoai257
+          password: $DOCKERHUB_PASSWORD
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.14
+          docker_layer_caching: true
+      - run: |
+          TAG=0.1.$CIRCLE_BUILD_NUM
+          cd nginxApp
+          docker build -t nginxapp:$TAG .
+          echo $DOCKERHUB_PASSWORD | docker login -u $DOCKER_USER --password-stdin
+          docker tag nginxapp:$TAG $DOCKER_USER/nginxapp:$TAG
+          docker push $DOCKER_USER/nginxapp:$TAG
+
+  cluster-build:
+    docker:
+      - image: "cimg/python:3.10"
+    parameters:
+      cluster-name:
+        description: Name of the EKS cluster
+        type: string
+        default: nginxapp-cluster2
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt install -y curl
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip -qq awscliv2.zip
+            sudo ./aws/install
+      - aws-eks/install-aws-iam-authenticator:
+          release-tag: ""
+      - kubernetes/install:
+          kubectl-version: v1.22.0
+      - aws-eks/create-cluster:
+          cluster-name: << parameters.cluster-name >>
+      - run:
+          command: |
+            kubectl get services
+          name: Test cluster
+      - cluster-destroy
+
+  nginxApp-deployment:
+    docker:
+      - image: "cimg/python:3.10"
+    parameters:
+      cluster-name:
+        description: Name of the EKS cluster.
+        type: string
+        default: nginxapp-cluster2
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt install -y curl
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip -qq awscliv2.zip
+            sudo ./aws/install
+      - run:
+          name: Pass docker image ID to deployment
+          command: |
+            export dockerid=$(($CIRCLE_BUILD_NUM - 2))
+            TAG=0.1.$dockerid
+            cat .circleci/files/deployment.yaml | sed "s/{{TAG_ID}}/$TAG/g" > .circleci/files/deployment_tmp.yaml
+            mv .circleci/files/deployment_tmp.yaml .circleci/files/deployment.yaml
+      - aws-eks/update-kubeconfig-with-authenticator:
+          cluster-name: << parameters.cluster-name >>
+          install-kubectl: true
+      - kubernetes/create-or-update-resource:
+          resource-file-path: .circleci/files/deployment.yaml
+          resource-name: deployment/nginxapp
+      - kubernetes/create-or-update-resource:
+          resource-file-path: .circleci/files/loadbalancer.yaml
+          resource-name: deployment/nginxapp
+      - run:
+          name: Test cluster/deployment
+          command: |
+            kubectl get nodes
+            kubectl get services
+            kubectl get deployment 
+            kubectl get pods
+            kubectl describe pods
+      - cluster-destroy
+
+workflows:
+  nginxAppDeployment:
+    jobs:
+      - nginxApp-lint
+      - docker-build:
+          requires: [nginxApp-lint]
+    #   - cluster-build:
+    #       requires: [docker-build]
+    #   - nginxApp-deployment:
+    #       requires: [cluster-build]
