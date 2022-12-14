@@ -29,7 +29,7 @@ jobs:
       - run:
           name: Make install
           command: |
-            cd nginxApp
+            nginxApp
             make install
       - run:
           name: Make lint
@@ -41,7 +41,7 @@ jobs:
     docker:
       - image: cimg/go:1.17
         auth:
-          username: lehoai257
+          username: $DOCKER_USER
           password: $DOCKERHUB_PASSWORD
     steps:
       - checkout
@@ -51,10 +51,10 @@ jobs:
       - run: |
           TAG=0.1.$CIRCLE_BUILD_NUM
           cd nginxApp
-          docker build -t nginxapp:$TAG .
+          docker build -t app:$TAG .
           echo $DOCKERHUB_PASSWORD | docker login -u $DOCKER_USER --password-stdin
-          docker tag nginxapp:$TAG $DOCKER_USER/nginxapp:$TAG
-          docker push $DOCKER_USER/nginxapp:$TAG
+          docker tag nginxapp:$TAG $DOCKER_USER/app:$TAG
+          docker push $DOCKER_USER/app:$TAG
 
   cluster-build:
     docker:
@@ -63,7 +63,7 @@ jobs:
       cluster-name:
         description: Name of the EKS cluster
         type: string
-        default: nginxapp-cluster2
+        default: app-cluster
     steps:
       - checkout
       - run:
@@ -92,7 +92,7 @@ jobs:
       cluster-name:
         description: Name of the EKS cluster.
         type: string
-        default: nginxapp-cluster2
+        default: app-cluster
     steps:
       - checkout
       - run:
