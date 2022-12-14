@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
       - name:  app
-        image: 0352730247/note-app:tagVersion
+        image: 0352730247/app:{{TAG_ID}}
         resources:
           limits:
             cpu: "100m"
